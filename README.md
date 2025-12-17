@@ -1,248 +1,174 @@
-# 🚀 n8n Multi-Setup Documentation
+🚀 n8n Multi-Setup Documentation (Custom Image)
 
-## 📄 Introduction
+📄 Introduction
+This repository documents a production-ready, multi-user n8n setup using Docker and Docker Compose, extended with a **custom n8n Docker image** that includes Python 3 and common data/automation libraries. This allows workflows to run advanced Python logic directly inside n8n (via Execute Command / Python usage).
 
-n8n is an open-source workflow automation tool used for creating and managing automated processes. This documentation provides a complete guide to setting up **n8n** (free version) on a local server using **Docker** and **Docker Compose**. The configuration includes **PostgreSQL** for the database and **LDAP** for organizational authentication.
-
-### ✨ Key Setup Details:
-
-* **n8n Version:** 1.122.5 (free, stable)
-* **Database:** PostgreSQL 16
-* **Authentication:** LDAP (integration with Active Directory)
-* **Server OS:** Ubuntu 22.04.5 LTS
-* **Docker Version:** 28.5.1
-* **Docker Compose Version:** v2.40.2
-* **Ports:** n8n on **5678** (HTTP), PostgreSQL on **5432** (localhost only)
-* **Resources:** 6 CPU cores, 12 GB RAM, ~165 GB free disk space
-* **Timezone:** Asia/Tehran (UTC+3:30)
-* **Installation Path:** `/opt/n8n-multi`
-* **Hostname:** `your-n8n-host.com` (replace with your domain; optionally proxied via Nginx)
-
-> This setup is designed for multi-user organizational use, with new users defaulting to the **"editor"** role. LDAP enables seamless login for domain users.
+The setup uses PostgreSQL for persistence and LDAP (Active Directory) for authentication and is suitable for organizational environments.
 
 ---
 
-### 🔒 Security Note:
+✨ Key Setup Details
 
-Sensitive values (e.g., **passwords, keys**) are placeholders in this documentation. **Replace them with secure, generated values** in production. Use a **`.env`** file for secrets and add it to **`.gitignore`**.
+* **n8n Version:** 1.122.5 (free, stable)
+* **Custom Image:** n8n-custom:1.122.5 (extends official image)
+* **Python:** Python 3 + pip + common libraries (requests, pandas, numpy, sqlalchemy, …)
+* **Database:** PostgreSQL 16
+* **Authentication:** LDAP (Active Directory)
+* **Server OS:** Ubuntu 22.04.5 LTS
+* **Docker Version:** 28.5.1
+* **Docker Compose:** v2.40.2 (plugin-based)
+* **Ports:**
 
-## 📋 Prerequisites
+  * n8n: 5678 (HTTP)
+  * PostgreSQL: 5432 (localhost only)
+* **Resources:** 6 CPU cores, 12 GB RAM, ~165 GB free disk
+* **Timezone:** Asia/Tehran (UTC+3:30)
+* **Install Path:** /opt/n8n-multi
+* **Hostname:** your-n8n-host.com (optionally behind Nginx)
 
-Ensure the following before starting:
+This setup is designed for **multi-user organizational use**, with LDAP users defaulting to the `editor` role.
 
-* **Operating System:** Ubuntu 22.04 LTS or equivalent (kernel 5.15.0+)
-* **Docker:** Version **28.5.1+** (systemd cgroup driver)
-* **Docker Compose:** **v2.40.2+**
-* **Hardware:** Minimum **4 GB RAM, 2 CPU cores, 50 GB disk space**
-* **Network:** Access to your LDAP server (e.g., `ldap://your-ldap-server:389`)
-* **Firewall:** Open port **5678** for external access (if required)
-* **Additional Tools:** Git for version control (optional but recommended)
+---
 
-### ⬇️ Installing Docker (If Not Installed)
+🔒 Security Notes
+
+* All secrets shown are placeholders.
+* Use a `.env` file for credentials and keys.
+* Add `.env` to `.gitignore`.
+* Rotate encryption keys and API keys regularly.
+
+---
+
+📋 Prerequisites
+
+* OS: Ubuntu 22.04 LTS (kernel 5.15+)
+* Docker Engine: 28.5.1+
+* Docker Compose plugin: v2.40.2+
+* Hardware (minimum):
+
+  * 4 GB RAM
+  * 2 CPU cores
+  * 50 GB disk
+* Network access to LDAP server (e.g. ldap://your-ldap-server:389)
+* Firewall: allow TCP 5678 if accessed externally
+
+---
+
+⬇️ Installing Docker (if not installed)
 
 ```bash
 sudo apt update
 sudo apt install docker.io docker-compose -y
 sudo systemctl enable --now docker
-sudo usermod -aG docker $USER  # Log out and log back in
+sudo usermod -aG docker $USER
+# Log out and log back in
+```
+
+---
 
 🛠️ Installation Steps
 
-Follow these steps to set up n8n from scratch.
-1. Create Project Directory
-Bash
+### 1️⃣ Create Project Directory
 
+```bash
 sudo mkdir -p /opt/n8n-multi
 cd /opt/n8n-multi
-sudo chown -R $USER:$USER .  # Use your user or a service account like 'bahram'
+sudo chown -R $USER:$USER .
+```
 
-2. Configure Docker Compose
+---
 
-Create the docker-compose.yml file (full file at the end). It defines:
+### 2️⃣ Environment Variables (.env)
 
-    The PostgreSQL service with a persistent volume.
+Create a `.env` file:
 
-    The n8n service connected to PostgreSQL and LDAP.
-
-    A custom bridge network (n8n-net).
-
-For secrets, create a .env file:
-Bash
-
-# Example .env (add to .gitignore)
+```env
+# Database
 DB_PASSWORD=your_db_password
-ENCRYPTION_KEY=your_encryption_key  # Generate: openssl rand -base64 32
+
+# n8n security
+ENCRYPTION_KEY=your_encryption_key   # openssl rand -base64 32
 API_KEY=your_api_key
-LDAP_BIND_CREDENTIALS=your_ldap_bind_credentials
-LDAP_BIND_DN=CN=your_bind_dn,OU=GlobalServiceAccounts,OU=DKHighLevelObjects,DC=example,DC=com
-LDAP_URL=ldap://your-ldap-server:389
-LDAP_SEARCH_BASE=dc=example,dc=com
 N8N_HOST=your-n8n-host.com
 
-Then reference it in docker-compose.yml:
-YAML
+# LDAP
+LDAP_URL=ldap://your-ldap-server:389
+LDAP_BIND_DN=CN=your_bind_dn,OU=GlobalServiceAccounts,OU=DKHighLevelObjects,DC=example,DC=com
+LDAP_BIND_CREDENTIALS=your_ldap_bind_credentials
+LDAP_SEARCH_BASE=dc=example,dc=com
+```
 
-env_file:
-  - .env
+Add `.env` to `.gitignore`.
 
-3. Set Up Persistent Volumes
-Bash
+---
 
+### 3️⃣ Persistent Volumes
+
+```bash
 mkdir -p n8n_data postgres_data
-sudo chown -R 1000:1000 n8n_data     # For n8n's node user
-sudo chown -R 999:999 postgres_data  # For PostgreSQL user
+sudo chown -R 1000:1000 n8n_data     # n8n (node user)
+sudo chown -R 999:999 postgres_data  # PostgreSQL
+```
 
-4. Start Services
-Bash
+---
 
-docker compose up -d     # Detached mode
-docker compose logs -f   # Monitor logs (Ctrl+C to exit)
+### 4️⃣ Custom Dockerfile (Python-enabled n8n)
 
-⚙️ Verify Status:
-Bash
+This Dockerfile extends the official n8n image and adds Python + libraries.
 
-docker compose ps            # Check containers
-docker compose logs postgres # PostgreSQL logs
-docker compose logs n8n      # n8n logs
+```Dockerfile
+FROM docker.n8n.io/n8nio/n8n:1.122.5
 
-    Note: PostgreSQL waits for a health check before n8n starts.
+USER root
 
-5. Configure LDAP (Active Directory)
+# Install Python and system dependencies (Alpine-based image)
+RUN apk update && apk add --no-cache \
+    python3 \
+    py3-pip \
+    python3-dev \
+    build-base \
+    curl \
+    git \
+    ca-certificates \
+    libffi-dev \
+    openssl-dev
 
-    Integrates n8n with your LDAP for user authentication.
+# Install common Python libraries (PEP 668 compatible)
+RUN pip3 install --no-cache-dir --break-system-packages \
+    requests \
+    urllib3 \
+    httpx \
+    pandas \
+    numpy \
+    scipy \
+    pydantic \
+    python-dateutil \
+    pytz \
+    python-dotenv \
+    tenacity \
+    rich \
+    loguru \
+    jsonschema \
+    lxml \
+    beautifulsoup4 \
+    xmltodict \
+    openpyxl \
+    xlrd \
+    sqlalchemy \
+    psycopg2-binary \
+    redis \
+    boto3 \
+    cryptography \
+    pyjwt
 
-    Search filter: (&(objectClass=user)(mail={{username}})) (email-based).
+USER node
+```
 
-    All LDAP users get admin access (N8N_LDAP_IS_ADMIN=true).
+---
 
-    Test: Visit http://your-n8n-host.com:5678 and log in with your domain email.
+### 5️⃣ Docker Compose Configuration
 
-6. Optional: Nginx Reverse Proxy
-
-For domain proxying (based on common setups):
-Bash
-
-sudo apt install nginx -y
-cat > /etc/nginx/sites-available/n8n << EOF
-server {
-    listen 80;
-    server_name your-n8n-host.com;
-
-    location / {
-        proxy_pass http://localhost:5678;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-    }
-}
-EOF
-sudo ln -s /etc/nginx/sites-available/n8n /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-
-7. Git and Custom Scripts
-
-    Initialize Git: git init in /opt/n8n-multi for workflow version control.
-
-    Custom scripts (e.g., ad_auth.py) can be added for AD testing.
-
-🧩 Configuration: Key Environment Variables
-Variable	Example Value	Description
-DB_TYPE	postgresdb	Database type
-DB_POSTGRESDB_HOST/_PORT/_DATABASE/_USER	postgres / 5432 / n8n_base / n8n_user	PostgreSQL connection
-DB_POSTGRESDB_PASSWORD	your_db_password	DB password (secure it!)
-N8N_HOST	your-n8n-host.com	n8n domain
-N8N_PORT	5678	Internal port
-WEBHOOK_URL	http://your-n8n-host.com/	Webhook base URL
-N8N_ENCRYPTION_KEY	your_encryption_key	Data encryption key
-N8N_API_KEY	your_api_key	API access key
-N8N_LDAP_*	See LDAP table below	LDAP settings
-TZ	Asia/Tehran	Timezone
-🔑 LDAP Configuration:
-Variable	Example Value	Description
-N8N_LDAP_ENABLED	true	Enable LDAP
-N8N_LDAP_URL	ldap://your-ldap-server:389	LDAP server URL
-N8N_LDAP_BIND_DN	"CN=your_bind_dn,..."	Bind DN
-N8N_LDAP_BIND_CREDENTIALS	your_ldap_bind_credentials	Bind password
-N8N_LDAP_SEARCH_BASE	"dc=example,dc=com"	Search base
-N8N_LDAP_SEARCH_FILTER	(&(objectClass=user)(mail={{username}}))	Email filter
-N8N_LDAP_UID_FIELD	mail	Username field
-N8N_LDAP_IS_ADMIN	true	Users as admin
-N8N_USER_DEFAULT_ROLE	editor	Default role
-💾 Data Persistence
-
-    n8n_data: /opt/n8n-multi/n8n_data – Config, logs (e.g., n8nEventLog.log), workflows.
-
-    postgres_data: /opt/n8n-multi/postgres_data/pgdata – DB files.
-
-    Logs: Check Docker logs or files in volumes.
-
-🔧 Service Management
-Start/Stop/Restart
-Bash
-
-cd /opt/n8n-multi
-docker compose up -d     # Start
-docker compose down      # Stop (keeps volumes)
-docker compose restart   # Restart
-
-Monitoring
-
-    Status: docker compose ps
-
-    Logs: docker compose logs -f n8n
-
-    UI: http://your-server-ip:5678
-
-    DB Health: docker exec n8n-multi-postgres-1 pg_isready -U n8n_user -d n8n_base
-
-☁️ Backup and Restore
-Backup:
-Bash
-
-# DB Dump
-docker exec n8n-multi-postgres-1 pg_dump -U n8n_user n8n_base > backups/n8n_backup_$(date +%Y%m%d).sql
-
-# n8n Data
-tar -czf backups/n8n_data_$(date +%Y%m%d).tar.gz n8n_data
-
-# Full (stop first)
-docker compose down
-tar -czf backups/full_$(date +%Y%m%d).tar.gz postgres_data n8n_data docker-compose.yml
-docker compose up -d
-
-Restore:
-Bash
-
-docker compose down
-tar -xzf backups/full_YYYYMMDD.tar.gz
-docker compose up -d
-# SQL: docker exec -i n8n-multi-postgres-1 psql -U n8n_user -d n8n_base < backups/n8n_backup.sql
-
-🔄 Updates
-Bash
-
-cd /opt/n8n-multi
-docker compose pull
-docker compose up -d
-# Update image tag in docker-compose.yml for new versions
-
-🐞 Troubleshooting
-Issue	Check / Command
-Containers Down	docker compose logs – Check DB/LDAP connectivity.
-LDAP Issues	Test with: ldapsearch -x -H ldap://your-ldap-server:389 -D "CN=your_bind_dn,..." -w "your_ldap_bind_credentials" -b "dc=example,dc=com" "(mail=test@example.com)"
-Port Conflict	netstat -tuln | grep 5678
-Memory Issues	Monitor with free -h; add resource limits in compose.
-Crashes	Check crash.journal in n8n_data.
-📝 Full docker-compose.yml (Example)
-YAML
-
-version: '3.9'
-
+```yaml
 services:
   postgres:
     image: postgres:16
@@ -250,7 +176,7 @@ services:
     environment:
       POSTGRES_DB: n8n_base
       POSTGRES_USER: n8n_user
-      POSTGRES_PASSWORD: ${DB_PASSWORD}  # From .env
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
@@ -265,10 +191,13 @@ services:
       - n8n-net
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n:1.122.5
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: n8n-custom:1.122.5
     restart: always
     env_file:
-      - .env  # Load secrets
+      - .env
     environment:
       # Database
       DB_TYPE: postgresdb
@@ -277,6 +206,7 @@ services:
       DB_POSTGRESDB_DATABASE: n8n_base
       DB_POSTGRESDB_USER: n8n_user
       DB_POSTGRESDB_PASSWORD: ${DB_PASSWORD}
+
       # Core
       N8N_HOST: ${N8N_HOST}
       N8N_PORT: 5678
@@ -285,16 +215,12 @@ services:
       N8N_PATH: /
       N8N_API_KEY: ${API_KEY}
       N8N_ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      N8N_USER_MANAGEMENT_DISABLED: "false"
-      N8N_SECURE_COOKIE: "false"
-      N8N_BASIC_AUTH_ACTIVE: "false"
-      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
-      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
-      N8N_LOG_LEVEL: "info"
-      N8N_LOG_OUTPUT: "console"
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_GIT_NODE_DISABLE_BARE_REPOS: "true"
       TZ: Asia/Tehran
       GENERIC_TIMEZONE: Asia/Tehran
       N8N_DEFAULT_TIMEZONE: Asia/Tehran
+
       # LDAP
       N8N_LDAP_ENABLED: "true"
       N8N_LDAP_URL: ${LDAP_URL}
@@ -305,6 +231,7 @@ services:
       N8N_LDAP_UID_FIELD: "mail"
       N8N_LDAP_IS_ADMIN: "true"
       N8N_USER_DEFAULT_ROLE: "editor"
+
     volumes:
       - ./n8n_data:/home/node/.n8n
       - /etc/localtime:/etc/localtime:ro
@@ -319,18 +246,67 @@ services:
 networks:
   n8n-net:
     driver: bridge
+```
 
-➕ Additional Notes
+---
 
-    Security: Enable HTTPS via Nginx + Let's Encrypt. Rotate keys regularly.
+### 6️⃣ Build & Run
 
-    Scaling: For advanced multi-tenant, consider n8n queue mode or enterprise.
+```bash
+docker compose build --no-cache n8n
+docker compose up -d
+```
 
-    Customization: Adjust LDAP filters or add custom nodes as needed.
+Verify:
 
-    License: MIT (feel free to fork and contribute).
+```bash
+docker compose ps
+docker compose logs -f n8n
+```
 
-    This documentation is self-contained for GitHub. Copy to n8n-docs.md or README.md. For questions, open an Issue!
+---
 
+### 7️⃣ Python Verification (Inside n8n)
 
-Would you like me to focus on translating any specific technical terms differently, or are you happy with this English version?
+```bash
+docker exec n8n-multi-n8n-1 python3 -c "import requests, pandas, numpy, sqlalchemy; print('Python OK inside n8n')"
+```
+
+---
+
+💾 Data Persistence
+
+* `n8n_data`: workflows, credentials, logs
+* `postgres_data`: PostgreSQL data directory
+
+---
+
+☁️ Backup & Restore
+**Backup:**
+
+```bash
+docker exec n8n-multi-postgres-1 pg_dump -U n8n_user n8n_base > backups/db.sql
+tar -czf backups/n8n_data.tar.gz n8n_data
+```
+
+**Restore:**
+
+```bash
+docker compose down
+tar -xzf backups/n8n_data.tar.gz
+docker compose up -d
+docker exec -i n8n-multi-postgres-1 psql -U n8n_user -d n8n_base < backups/db.sql
+```
+
+---
+
+🔧 Maintenance Notes
+
+* `docker builder prune -f` is safe (does NOT delete volumes or data)
+* Update n8n by bumping the image tag and rebuilding
+* Consider HTTPS with Nginx + Let’s Encrypt for production
+
+---
+
+📜 License
+MIT – free to use, fork, and adapt for internal or public deployments.
