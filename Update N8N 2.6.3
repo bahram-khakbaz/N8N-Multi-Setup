@@ -1,0 +1,101 @@
+عالی، پس بهتره به جای جایگزین کردن کل README، یه **بخش جدید** پایین README قبلی اضافه کنیم با عنوان مثلا:
+
+---
+
+## ⚡ n8n Multi-Setup – Version 2.6.3 Update (Python + Node 20)
+
+📄 This section documents updates for the **latest n8n version 2.6.3**, including a **custom Docker image with Node.js 20** and **Python 3.9 (virtualenv)**. Workflows that require advanced Python logic can now run directly inside n8n.
+
+✨ **Key Changes from Previous Version:**
+
+* **n8n Version:** 2.6.3
+* **Node.js:** 20.x (required by n8n 2.6.3)
+* **Python:** 3.9 + virtualenv + pip + common libraries
+* **Custom Image:** n8n-custom:2.6.3
+* Updated **Dockerfile** to use Node 20 and create Python virtual environment
+* All previously supported PostgreSQL & LDAP configurations remain the same
+
+---
+
+### Custom Dockerfile (Python-enabled + Node 20)
+
+```Dockerfile
+FROM node:20-bullseye-slim
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-venv \
+    build-essential \
+    curl \
+    git \
+    ca-certificates \
+    libffi-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --upgrade pip setuptools wheel
+
+RUN pip install \
+    requests \
+    urllib3 \
+    httpx \
+    pandas \
+    numpy \
+    scipy \
+    pydantic \
+    python-dateutil \
+    pytz \
+    python-dotenv \
+    tenacity \
+    rich \
+    loguru \
+    jsonschema \
+    lxml \
+    beautifulsoup4 \
+    xmltodict \
+    openpyxl \
+    xlrd \
+    sqlalchemy \
+    psycopg2-binary \
+    redis \
+    boto3 \
+    cryptography \
+    pyjwt
+
+RUN npm install -g n8n@2.6.3
+
+USER node
+EXPOSE 5678
+CMD ["n8n"]
+```
+
+---
+
+### Docker Compose Notes
+
+* Image name updated to `n8n-custom:2.6.3`
+* Node 20 + Python 3.9 included in the image
+* All previous environment variables (`.env`) and LDAP/PostgreSQL setups remain unchanged
+* Build and run:
+
+```bash
+docker compose build --no-cache n8n
+docker compose up -d
+```
+
+---
+
+### Python Verification
+
+```bash
+docker exec n8n-multi-n8n-1 python3 -c "import requests, pandas, numpy, sqlalchemy; print('Python OK inside n8n')"
+```
+
+---
+
