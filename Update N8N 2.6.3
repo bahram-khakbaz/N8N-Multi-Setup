@@ -1,45 +1,32 @@
+## ⚡ n8n Multi-Setup – Version 2.6.3 Update (Python + Node 20 + Playwright)
 
+This update documents the current production stack based on n8n 2.6.3, Node.js 20 and Python 3.9, plus Playwright browser automation support.
 
-## ⚡ n8n Multi-Setup – Version 2.6.3 Update (Python + Node 20)
+### Key versions
 
-📄 This section documents updates for the **latest n8n version 2.6.3**, including a **custom Docker image with Node.js 20** and **Python 3.9 (virtualenv)**. Workflows that require advanced Python logic can now run directly inside n8n.
+* **n8n:** 2.6.3
+* **Node.js:** 20.x
+* **Python:** 3.9 + virtualenv
+* **Custom image:** `n8n-custom:2.6.3`
+* **Playwright:** `1.48.0`
+* **Browser:** Chromium (Playwright-managed)
 
-✨ **Key Changes from Previous Version:**
+### Python packages
 
-* **n8n Version:** 2.6.3
-* **Node.js:** 20.x (required by n8n 2.6.3)
-* **Python:** 3.9 + virtualenv + pip + common libraries
-* **Custom Image:** n8n-custom:2.6.3
-* Updated **Dockerfile** to use Node 20 and create Python virtual environment
-* All previously supported PostgreSQL & LDAP configurations remain the same
+The custom image includes the existing Python automation/data libraries plus:
 
----
+```text
+playwright==1.48.0
+```
 
-### Custom Dockerfile (Python-enabled + Node 20)
+### Playwright / Chromium
+
+Playwright requires both the Python package and a browser runtime. The production container was enabled in-place to avoid downtime, and Chromium was verified successfully.
+
+Future image builds should include:
 
 ```Dockerfile
-FROM node:20-bullseye-slim
-
-USER root
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    python3-venv \
-    build-essential \
-    curl \
-    git \
-    ca-certificates \
-    libffi-dev \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-RUN pip install --upgrade pip setuptools wheel
-
-RUN pip install \
+RUN pip install --no-cache-dir \
     requests \
     urllib3 \
     httpx \
@@ -64,36 +51,82 @@ RUN pip install \
     redis \
     boto3 \
     cryptography \
-    pyjwt
+    pyjwt \
+    playwright==1.48.0
 
-RUN npm install -g n8n@2.6.3
+RUN python -m playwright install-deps chromium
+
+RUN mkdir -p /home/node/.cache/ms-playwright \
+    && chown -R node:node /home/node/.cache
 
 USER node
-EXPOSE 5678
-CMD ["n8n"]
+RUN python -m playwright install chromium
+USER root
 ```
 
----
+### Runtime verification
 
-### Docker Compose Notes
-
-* Image name updated to `n8n-custom:2.6.3`
-* Node 20 + Python 3.9 included in the image
-* All previous environment variables (`.env`) and LDAP/PostgreSQL setups remain unchanged
-* Build and run:
+Check Playwright:
 
 ```bash
-docker compose build --no-cache n8n
-docker compose up -d
+docker exec n8n-multi-n8n-1 \
+  python3 -m pip show playwright
 ```
 
----
+Expected version:
 
-### Python Verification
+```text
+Version: 1.48.0
+```
+
+Run a real Chromium test:
 
 ```bash
-docker exec n8n-multi-n8n-1 python3 -c "import requests, pandas, numpy, sqlalchemy; print('Python OK inside n8n')"
+docker exec -i n8n-multi-n8n-1 python3 - <<'PY'
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page()
+    page.set_content("<title>DigiExpress Playwright Test</title>")
+    print("PLAYWRIGHT_OK")
+    print("Chromium:", browser.version)
+    print("Title:", page.title())
+    browser.close()
+PY
 ```
 
----
+Verified production result:
 
+```text
+PLAYWRIGHT_OK
+Chromium: 130.0.6723.31
+Title: DigiExpress Playwright Test
+```
+
+### Using Playwright from n8n
+
+For the current deployment, use an **Execute Command** node so the workflow runs against the Python/Playwright environment installed in the main n8n container.
+
+Example command:
+
+```bash
+python3 - <<'PY'
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page()
+    page.goto("https://example.com", wait_until="domcontentloaded")
+    print("PLAYWRIGHT_OK")
+    print("Title:", page.title())
+    print("URL:", page.url)
+    browser.close()
+PY
+```
+
+### Zero-downtime production note
+
+Playwright and Chromium were installed in-place on the running production container to avoid restarting or recreating n8n. Therefore, until the custom image is rebuilt and deployed during a maintenance window, do not recreate the running container solely for this change.
+
+The repository now also includes a top-level `Dockerfile` containing the reproducible Playwright configuration for future image builds.
